@@ -1,0 +1,376 @@
+<?php
+
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+/**
+ * This Class used as REST API for Payment
+ * @package   CodeIgniter
+ * @category  Controller
+ * @author    MobiwebTech Team
+ */
+class Pay extends Common_API_Controller {
+
+    public $PAYTM_ENVIRONMENT = "";
+    public $PAYTM_MERCHANT_KEY = "";
+    public $PAYTM_MERCHANT_MID = "";
+    public $PAYTM_MERCHANT_WEBSITE = "";
+    public $PAYTM_DOMAIN = "";
+    public $PAYTM_REFUND_URL = "";
+    public $PAYTM_STATUS_QUERY_URL = "";
+    public $PAYTM_STATUS_QUERY_NEW_URL = "";
+    public $PAYTM_TXN_URL = "";
+
+    function __construct() {
+        parent::__construct();
+        $this->lang->load('en', 'english');
+        $this->PAYTM_ENVIRONMENT = (getConfig('paytm_environment') != "") ? getConfig('paytm_environment') : "TEST";
+        $this->PAYTM_MERCHANT_KEY = getConfig('paytm_merchant_key');
+        $this->PAYTM_MERCHANT_MID = getConfig('paytm_merchant_mid');
+        $this->PAYTM_MERCHANT_WEBSITE = getConfig('paytm_merchant_website');
+        $this->PAYTM_DOMAIN = ($this->PAYTM_ENVIRONMENT == "PROD") ? "secure.paytm.in" : "pguat.paytm.com";
+        $this->PAYTM_REFUND_URL = 'https://' . $this->PAYTM_DOMAIN . '/oltp/HANDLER_INTERNAL/REFUND';
+        $this->PAYTM_STATUS_QUERY_URL = 'https://' . $this->PAYTM_DOMAIN . '/oltp/HANDLER_INTERNAL/TXNSTATUS';
+        $this->PAYTM_STATUS_QUERY_NEW_URL = 'https://' . $this->PAYTM_DOMAIN . '/oltp/HANDLER_INTERNAL/getTxnStatus';
+        $this->PAYTM_TXN_URL = 'https://' . $this->PAYTM_DOMAIN . '/oltp-web/processTransaction';
+    }
+
+    function encrypt_e($input, $ky) {
+        $key = $ky;
+        $size = mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, 'cbc');
+        $input = pkcs5_pad_e($input, $size);
+        $td = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', 'cbc', '');
+        $iv = "@@@@&&&&####$$$$";
+        mcrypt_generic_init($td, $key, $iv);
+        $data = mcrypt_generic($td, $input);
+        mcrypt_generic_deinit($td);
+        mcrypt_module_close($td);
+        $data = base64_encode($data);
+        return $data;
+    }
+
+    function decrypt_e($crypt, $ky) {
+
+        $crypt = base64_decode($crypt);
+        $key = $ky;
+        $td = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', 'cbc', '');
+        $iv = "@@@@&&&&####$$$$";
+        mcrypt_generic_init($td, $key, $iv);
+        $decrypted_data = mdecrypt_generic($td, $crypt);
+        mcrypt_generic_deinit($td);
+        mcrypt_module_close($td);
+        $decrypted_data = pkcs5_unpad_e($decrypted_data);
+        $decrypted_data = rtrim($decrypted_data);
+        return $decrypted_data;
+    }
+
+    function pkcs5_pad_e($text, $blocksize) {
+        $pad = $blocksize - (strlen($text) % $blocksize);
+        return $text . str_repeat(chr($pad), $pad);
+    }
+
+    function pkcs5_unpad_e($text) {
+        $pad = ord($text{strlen($text) - 1});
+        if ($pad > strlen($text))
+            return false;
+        return substr($text, 0, -1 * $pad);
+    }
+
+    function generateSalt_e($length) {
+        $random = "";
+        srand((double) microtime() * 1000000);
+
+        $data = "AbcDE123IJKLMN67QRSTUVWXYZ";
+        $data .= "aBCdefghijklmn123opq45rs67tuv89wxyz";
+        $data .= "0FGH45OP89";
+
+        for ($i = 0; $i < $length; $i++) {
+            $random .= substr($data, (rand() % (strlen($data))), 1);
+        }
+
+        return $random;
+    }
+
+    function checkString_e($value) {
+        if ($value == 'null')
+            $value = '';
+        return $value;
+    }
+
+    function getChecksumFromArray($arrayList, $key, $sort = 1) {
+        if ($sort != 0) {
+            ksort($arrayList);
+        }
+        $str = getArray2Str($arrayList);
+        $salt = generateSalt_e(4);
+        $finalString = $str . "|" . $salt;
+        $hash = hash("sha256", $finalString);
+        $hashString = $hash . $salt;
+        $checksum = encrypt_e($hashString, $key);
+        return $checksum;
+    }
+
+    function getChecksumFromString($str, $key) {
+
+        $salt = generateSalt_e(4);
+        $finalString = $str . "|" . $salt;
+        $hash = hash("sha256", $finalString);
+        $hashString = $hash . $salt;
+        $checksum = encrypt_e($hashString, $key);
+        return $checksum;
+    }
+
+    function verifychecksum_e($arrayList, $key, $checksumvalue) {
+        $arrayList = removeCheckSumParam($arrayList);
+        ksort($arrayList);
+        $str = getArray2StrForVerify($arrayList);
+        $paytm_hash = decrypt_e($checksumvalue, $key);
+        $salt = substr($paytm_hash, -4);
+
+        $finalString = $str . "|" . $salt;
+
+        $website_hash = hash("sha256", $finalString);
+        $website_hash .= $salt;
+
+        $validFlag = "FALSE";
+        if ($website_hash == $paytm_hash) {
+            $validFlag = "TRUE";
+        } else {
+            $validFlag = "FALSE";
+        }
+        return $validFlag;
+    }
+
+    function verifychecksum_eFromStr($str, $key, $checksumvalue) {
+        $paytm_hash = decrypt_e($checksumvalue, $key);
+        $salt = substr($paytm_hash, -4);
+
+        $finalString = $str . "|" . $salt;
+
+        $website_hash = hash("sha256", $finalString);
+        $website_hash .= $salt;
+
+        $validFlag = "FALSE";
+        if ($website_hash == $paytm_hash) {
+            $validFlag = "TRUE";
+        } else {
+            $validFlag = "FALSE";
+        }
+        return $validFlag;
+    }
+
+    function getArray2Str($arrayList) {
+        $findme = 'REFUND';
+        $findmepipe = '|';
+        $paramStr = "";
+        $flag = 1;
+        foreach ($arrayList as $key => $value) {
+            $pos = strpos($value, $findme);
+            $pospipe = strpos($value, $findmepipe);
+            if ($pos !== false || $pospipe !== false) {
+                continue;
+            }
+
+            if ($flag) {
+                $paramStr .= checkString_e($value);
+                $flag = 0;
+            } else {
+                $paramStr .= "|" . checkString_e($value);
+            }
+        }
+        return $paramStr;
+    }
+
+    function getArray2StrForVerify($arrayList) {
+        $paramStr = "";
+        $flag = 1;
+        foreach ($arrayList as $key => $value) {
+            if ($flag) {
+                $paramStr .= checkString_e($value);
+                $flag = 0;
+            } else {
+                $paramStr .= "|" . checkString_e($value);
+            }
+        }
+        return $paramStr;
+    }
+
+    function redirect2PG($paramList, $key) {
+        $hashString = getchecksumFromArray($paramList);
+        $checksum = encrypt_e($hashString, $key);
+    }
+
+    function removeCheckSumParam($arrayList) {
+        if (isset($arrayList["CHECKSUMHASH"])) {
+            unset($arrayList["CHECKSUMHASH"]);
+        }
+        return $arrayList;
+    }
+
+    function getTxnStatus($requestParamList) {
+        return callAPI(PAYTM_STATUS_QUERY_URL, $requestParamList);
+    }
+
+    function getTxnStatusNew($requestParamList) {
+        return callNewAPI(PAYTM_STATUS_QUERY_NEW_URL, $requestParamList);
+    }
+
+    function initiateTxnRefund($requestParamList) {
+        $CHECKSUM = getRefundChecksumFromArray($requestParamList, PAYTM_MERCHANT_KEY, 0);
+        $requestParamList["CHECKSUM"] = $CHECKSUM;
+        return callAPI(PAYTM_REFUND_URL, $requestParamList);
+    }
+
+    function callAPI($apiURL, $requestParamList) {
+        $jsonResponse = "";
+        $responseParamList = array();
+        $JsonData = json_encode($requestParamList);
+        $postData = 'JsonData=' . urlencode($JsonData);
+        $ch = curl_init($apiURL);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($postData))
+        );
+        $jsonResponse = curl_exec($ch);
+        $responseParamList = json_decode($jsonResponse, true);
+        return $responseParamList;
+    }
+
+    function callNewAPI($apiURL, $requestParamList) {
+        $jsonResponse = "";
+        $responseParamList = array();
+        $JsonData = json_encode($requestParamList);
+        $postData = 'JsonData=' . urlencode($JsonData);
+        $ch = curl_init($apiURL);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($postData))
+        );
+        $jsonResponse = curl_exec($ch);
+        $responseParamList = json_decode($jsonResponse, true);
+        return $responseParamList;
+    }
+
+    function getRefundChecksumFromArray($arrayList, $key, $sort = 1) {
+        if ($sort != 0) {
+            ksort($arrayList);
+        }
+        $str = getRefundArray2Str($arrayList);
+        $salt = generateSalt_e(4);
+        $finalString = $str . "|" . $salt;
+        $hash = hash("sha256", $finalString);
+        $hashString = $hash . $salt;
+        $checksum = encrypt_e($hashString, $key);
+        return $checksum;
+    }
+
+    function getRefundArray2Str($arrayList) {
+        $findmepipe = '|';
+        $paramStr = "";
+        $flag = 1;
+        foreach ($arrayList as $key => $value) {
+            $pospipe = strpos($value, $findmepipe);
+            if ($pospipe !== false) {
+                continue;
+            }
+
+            if ($flag) {
+                $paramStr .= checkString_e($value);
+                $flag = 0;
+            } else {
+                $paramStr .= "|" . checkString_e($value);
+            }
+        }
+        return $paramStr;
+    }
+
+    function callRefundAPI($refundApiURL, $requestParamList) {
+        $jsonResponse = "";
+        $responseParamList = array();
+        $JsonData = json_encode($requestParamList);
+        $postData = 'JsonData=' . urlencode($JsonData);
+        $ch = curl_init($apiURL);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_URL, $refundApiURL);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $headers = array();
+        $headers[] = 'Content-Type: application/json';
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $jsonResponse = curl_exec($ch);
+        $responseParamList = json_decode($jsonResponse, true);
+        return $responseParamList;
+    }
+
+    /**
+     * Function Name: payPayTm
+     * Description:   To pay by paytm method
+     */
+    function payPaytm_post() {
+        $checkSum = "";
+        $paramList = array();
+
+        $ORDER_ID = "ORDS" . rand(10000, 99999999);
+        $CUST_ID = "CUST001";
+        $INDUSTRY_TYPE_ID = "Retail";
+        $CHANNEL_ID = "WEB";
+        $TXN_AMOUNT = 1;
+
+        // Create an array having all required parameters for creating checksum.
+        $paramList["MID"] = $this->PAYTM_MERCHANT_MID;
+        $paramList["ORDER_ID"] = $ORDER_ID;
+        $paramList["CUST_ID"] = $CUST_ID;
+        $paramList["INDUSTRY_TYPE_ID"] = $INDUSTRY_TYPE_ID;
+        $paramList["CHANNEL_ID"] = $CHANNEL_ID;
+        $paramList["TXN_AMOUNT"] = $TXN_AMOUNT;
+        $paramList["WEBSITE"] = $this->PAYTM_MERCHANT_WEBSITE;
+        $checkSum = $this->getChecksumFromArray($paramList, $this->PAYTM_MERCHANT_KEY);
+    }
+
+    /**
+     * Function Name: PayResponse
+     * Description:   To handle response
+     */
+    function PayResponse() {
+        $paytmChecksum = "";
+        $paramList = array();
+        $isValidChecksum = "FALSE";
+
+        $paramList = $_POST;
+        $paytmChecksum = isset($_POST["CHECKSUMHASH"]) ? $_POST["CHECKSUMHASH"] : ""; //Sent by 
+        $isValidChecksum = $this->verifychecksum_e($paramList, $this->PAYTM_MERCHANT_KEY, $paytmChecksum); //will
+        if ($isValidChecksum == "TRUE") {
+            echo "<b>Checksum matched and following are the transaction details:</b>" . "<br/>";
+            if ($_POST["STATUS"] == "TXN_SUCCESS") {
+                echo "<b>Transaction status is success</b>" . "<br/>";
+                //Process your transaction here as success transaction.
+                //Verify amount & order id received from Payment gateway with your application's order id and amount.
+            } else {
+                echo "<b>Transaction status is failure</b>" . "<br/>";
+            }
+
+            if (isset($_POST) && count($_POST) > 0) {
+                foreach ($_POST as $paramName => $paramValue) {
+                    echo "<br/>" . $paramName . " = " . $paramValue;
+                }
+            }
+        } else {
+            echo "<b>Checksum mismatched.</b>";
+            //Process transaction as suspicious.
+        }
+    }
+
+}
+?>
+

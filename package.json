@@ -1,0 +1,24 @@
+{
+  "name": "cricket-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "moment": "^2.19.3",
+    "react": "^16.2.0",
+    "react-dom": "^16.2.0",
+    "react-form": "^2.13.0",
+    "react-router": "^4.2.0",
+    "react-router-dom": "^4.2.2",
+    "react-scripts": "1.0.17",
+    "react-slick": "^0.15.4",
+    "react-validation": "^3.0.7",
+    "slick-carousel": "^1.8.1",
+    "validator": "^9.1.2"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
+  }
+}
