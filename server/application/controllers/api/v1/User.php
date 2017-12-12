@@ -132,81 +132,50 @@ class User extends Common_API_Controller {
      */
     function signup_post() {
 
-        $data = $this->input->post();
+        $data = @file_get_contents("php://input");
+        $post = json_decode($data);
         $return['code'] = 200;
         $return['response'] = new stdClass();
-        $signUpType = $this->input->post('signup_type');
-        $this->form_validation->set_rules('signup_type', 'Sign Up Type', 'trim|required|in_list[WEB,APP]');
-        $this->form_validation->set_rules('full_name', 'Full Name', 'trim|required');
-        $this->form_validation->set_rules('email', 'Email Id', 'trim|required|valid_email|is_unique[' . USERS . '.email]');
-        $this->form_validation->set_rules('password', 'Password', 'trim|required|min_length[6]|max_length[14]|callback_is_secure_pass');
-        $this->form_validation->set_rules('confm_pswd', 'Confirm Password', 'trim|required|min_length[6]|max_length[14]|matches[password]');
-        $this->form_validation->set_rules('date_of_birth', 'Date of Birth', 'trim|required|callback__validate_birthdate_format');
-        if ($signUpType == "APP") {
-            $this->form_validation->set_rules('device_type', 'Device Type', 'trim|required|in_list[ANDROID,IOS]');
-            $this->form_validation->set_rules('device_token', 'Device Token', 'trim|required');
-            $this->form_validation->set_rules('device_id', 'Device Id', 'trim|required');
-        }
-        if ($this->form_validation->run() == FALSE) {
-            $error = $this->form_validation->rest_first_error_string();
-            $return['status'] = 0;
-            $return['message'] = $error;
+
+        $identity_column = $this->config->item('identity', 'ion_auth');
+        $this->data['identity_column'] = $identity_column;
+        $identity = $post->email;
+        $password = $post->password;
+        $email = strtolower($post->email);
+        $option = array('table' => 'users','where' => array('email' => $email));
+        $isExists = $this->common_model->customGet($option);
+        if(empty($isExists)){
+        $identity = ($identity_column === 'email') ? $email :$post->email;
+        $dataArr = array();
+        $dataArr['first_name'] = $post->full_name;
+        $dataArr['date_of_birth'] = date('Y-m-d');
+        $dataArr['is_pass_token'] = $password;
+        $dataArr['email_verify'] = 0;
+        $username = explode('@', $identity);
+        $dataArr['username'] = $username[0];
+        $digits = 5;
+        $dataArr['team_code'] = strtoupper(substr(preg_replace('/[^A-Za-z0-9\-]/', '', $username[0]), 0, 5)) . rand(pow(10, $digits - 1), pow(10, $digits) - 1);
+
+        $lid = $this->ion_auth->register($identity, $password, $email, $dataArr, array(2));
+        if ($lid) {
+            /* Return success response */
+            $return['status'] = 1;
+            $return['message'] = 'User registered successfully';
         } else {
-            $identity_column = $this->config->item('identity', 'ion_auth');
-            $this->data['identity_column'] = $identity_column;
-            $identity = extract_value($data, 'email', '');
-            $password = extract_value($data, 'password', '');
-            $email = strtolower(extract_value($data, 'email', ''));
-            $identity = ($identity_column === 'email') ? $email : extract_value($data, 'email', '');
-            $dataArr = array();
-            $dataArr['first_name'] = extract_value($data, 'full_name', '');
-            $dataArr['date_of_birth'] = extract_value($data, 'date_of_birth', '');
-            $dataArr['is_pass_token'] = $password;
-            $dataArr['email_verify'] = 0;
-            $username = explode('@', $identity);
-            $dataArr['username'] = $username[0];
-            $digits = 5;
-            $dataArr['team_code'] = strtoupper(substr(preg_replace('/[^A-Za-z0-9\-]/', '', $username[0]), 0, 5)) . rand(pow(10, $digits - 1), pow(10, $digits) - 1);
-            if ($signUpType == "APP") {
-                $dataArr['device_token'] = extract_value($data, 'device_token', '');
-                $dataArr['device_type'] = extract_value($data, 'device_type', '');
-                $dataArr['device_id'] = extract_value($data, 'device_id', '');
-            }
-
-            $lid = $this->ion_auth->register($identity, $password, $email, $dataArr, array(2));
-            if ($lid) {
-                if ($signUpType == "APP") {
-                    /* Save user device history */
-                    save_user_device_history($lid, $dataArr['device_token'], $dataArr['device_type'], $dataArr['device_id']);
-                }
-                //$email = $dataArr['email'];
-                /* $token = encoding($email . "-" . $lid . "-" . time()); */
-
-                /* $tokenArr = array('user_token' => $token);
-                  $this->common_model->updateFields(USERS, $tokenArr, array('id' => $lid)); */
-
-                /* $link = base_url() . 'auth/verifyuser?email=' . $email . '&token=' . $token;
-                  $message = "";
-                  $message .= "<img style='width:200px' src='" . base_url() . getConfig('site_logo') . "' class='img-responsive'></br></br>";
-                  $message .= "<br><br> Hello, <br/><br/>";
-                  $message .= "Your " . getConfig('site_name') . " profile has been created. Please click on below link to verify your account. <br/><br/>";
-                  $message .= "Click here : <a href='" . $link . "'>Verify Your Email</a>";
-                  send_mail($message, '[' . getConfig('site_name') . '] Thank you for registering with us', $email, getConfig('admin_email')); */
-
-                /* Return success response */
+            $is_error = db_err_msg();
+            if ($is_error == FALSE) {
                 $return['status'] = 1;
                 $return['message'] = 'User registered successfully';
             } else {
-                $is_error = db_err_msg();
-                if ($is_error == FALSE) {
-                    $return['status'] = 1;
-                    $return['message'] = 'User registered successfully';
-                } else {
-                    $return['status'] = 0;
-                    $return['message'] = $is_error;
-                }
+                $return['status'] = 0;
+                $return['message'] = $is_error;
             }
         }
+    }else{
+        $return['status'] = 0;
+        $return['message'] = "Email already exists, Please login"; 
+    }
+        
         $this->response($return);
     }
 

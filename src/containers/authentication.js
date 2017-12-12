@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-
+const URL = "http://localhost/cricket-app";
 class Authentication extends Component {
     constructor(props) {
         super(props);
@@ -7,7 +7,7 @@ class Authentication extends Component {
     }
 
     login(email, password) {
-        let Url = 'http://localhost/cricket-app/server/api/v1/user/isAuth';
+        let Url = URL+'/server/api/v1/user/isAuth';
         let stateData = {
             email: email,
             password: password,
@@ -23,6 +23,23 @@ class Authentication extends Component {
                 }
                 return Promise.resolve(res);
             });
+    }
+
+    signUp(formData){
+        let Url = URL+'/server/api/v1/user/signup';
+        let stateData = {
+            email: formData.email,
+            signup_type:"WEB",
+            full_name:formData.username,
+            password:formData.password
+            //date_of_birth:formData.date_of_birth
+        };
+        let option = { method: 'POST', body: JSON.stringify(stateData) };
+        return this.fetch(Url,option)
+        .then((res) =>{
+            return Promise.resolve(res);
+        });
+        
     }
 
     setProfile(userResponse) {

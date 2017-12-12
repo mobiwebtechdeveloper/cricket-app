@@ -4,6 +4,7 @@ import Authentication from '../../containers/authentication';
 import { Redirect } from 'react-router-dom';
 import Moment from 'moment';
 const Auth = new Authentication();
+const URL = "http://localhost/cricket-app";
 class Home extends Component{
 
   constructor(props){
@@ -18,7 +19,7 @@ class Home extends Component{
   }
 
   componentWillMount = () => {
-    let Url = 'http://localhost/cricket-app/server/api/v1/match/matches';
+    let Url = URL+'/server/api/v1/match/matches';
     let stateData = {login_session_key: Auth.getToken()};
     let option = { method: 'POST', body: JSON.stringify(stateData) };
     Auth.fetch(Url,option)
@@ -28,7 +29,7 @@ class Home extends Component{
   }
 
    matchList(matchData){
-    console.log(Moment("12-25-1995", ["MM-DD-YYYY", "YYYY-MM-DD"]));
+   // console.log(Moment("12-25-1995", ["MM-DD-YYYY", "YYYY-MM-DD"]));
     var settings = {
       dots: true,
       infinite: true,
@@ -36,19 +37,28 @@ class Home extends Component{
       slidesToShow: 1,
       slidesToScroll: 1,
       autoplay:0,
-      slidesToShow:2
+      slidesToShow:3,
+      dotsClass:"slick-dots",
+      useCSS:true
     };
+    var now = Moment("04/09/2013 15:00:00");
+    var then = Moment("04/09/2013 14:20:30");
+    
+    console.log(Moment(Moment.duration(now.diff(then))).format("hh:mm:ss"))
 
     var Matches = this.state.match.map(function(match_list){
       return <div className="slick_item">
             <div className="slick_item_inner">
-              <div className="listitem_header"> {match_list.match_num} </div>
+              <div className="listitem_header"> {match_list.match_num} 
+            </div>
               <div className="listitem_content">
                 <ul>
                   <li>
                     <span className="text-info">( {match_list.localteam} )   Vs </span> <span className="text-info">( {match_list.visitorteam} )</span>
-                    <a href="/" className="cloud_icon">
-                      <i className="flaticon-timer"></i> 
+                    <a href="/" className="cloud_icon col-md-1">
+                      <i className="flaticon-timer">
+          
+                        </i> 
                     </a>
                   </li>
                   <li>
@@ -499,7 +509,6 @@ class Home extends Component{
                                                                   </div>
                                                                 </div>
                             </div>
-    
                             </div>
                             <div id="contest" className="tab-pane fade">
                               <h3>Menu 1</h3>
