@@ -20,7 +20,7 @@ class App extends Component {
     return (
       <div className="App">
         <MuiThemeProvider>
-        <Header />
+        <Header profile={JSON.parse(Auth.getProfile())}/>
             <Switch>
             <Route exact path='/' component={Signin}/>
             <Route exact path='/signup' component={Signup}/>

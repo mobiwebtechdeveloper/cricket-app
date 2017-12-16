@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import validator from 'validator';
 import Authentication from '../../containers/authentication';
 import { Redirect } from 'react-router-dom';
+import FacebookLogin from 'react-facebook-login';
 const Auth = new Authentication();
 class Signin extends Component {
 
@@ -11,6 +12,21 @@ class Signin extends Component {
         this.handleChange = this.handleChange.bind(this);
         this.state = {email:"",password:"",error:"",authFails:false};
     }
+
+    handleFacebookLogin = (user) => {
+        Auth.facebookAuth(user)
+        .then((res) =>{
+            if(!res.status){
+                this.props.history.push('/');  
+            }else{
+               this.props.history.push('/leagues'); 
+           }
+       });
+    }
+
+    handleSocialLoginFailure = (err) => {
+        console.error(err)
+      }
 
     handleChange(e){
         this.setState ({
@@ -35,15 +51,27 @@ class Signin extends Component {
             });
            
         }
+    }
 
-        
+    loginWithFB = () => {
+        console.log('sdf');
+        return <FacebookLogin
+        appId="834884540027854"
+        autoLoad={true}
+        fields="name,email,picture"
+        callback={this.handleFacebookLogin}
+        cssClass="google_sign"
+        icon="fa-facebook"
+      />;
     }
 
     render() {
         if(Auth.loggedIn()){
             return <Redirect to="/leagues" />
         }
+        
         return (
+            
             <div className="main_container">
                 <section className="main_content_sec signup_sec">
                     <div className="container">
@@ -77,7 +105,15 @@ class Signin extends Component {
                         <div className="or_box">OR</div>
                         <div className="signup_right">
                             <h3>Connect instantly <br></br> with</h3>
-                            <a href="/">Log in with facebook</a>
+                           
+                             <FacebookLogin
+                            appId="834884540027854"
+                            autoLoad={false}
+                            fields="name,email,picture"
+                            callback={this.handleFacebookLogin}
+                            cssClass="fb-btn"
+                            icon="fa-facebook"
+                              />
                             <a href="/" className="google_sign">Log in with Google +</a>
                         </div>
                     </div>

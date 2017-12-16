@@ -22,26 +22,18 @@ class User extends Common_API_Controller {
      */
     function socialSignIn_post() {
 
-        $data = $this->input->post();
+        $data = @file_get_contents("php://input");
+        $post = json_decode($data);
         $return['code'] = 200;
         $return['response'] = new stdClass();
-        $signUpType = $this->input->post('social_signup_type');
-        $this->form_validation->set_rules('social_signup_type', 'Social Sign Up Type', 'trim|required|in_list[FACEBOOK,GOOGLE]');
-        $this->form_validation->set_rules('full_name', 'Full Name', 'trim|required');
-        $this->form_validation->set_rules('email', 'Email Id', 'trim|required|valid_email');
 
-        if ($this->form_validation->run() == FALSE) {
-            $error = $this->form_validation->rest_first_error_string();
-            $return['status'] = 0;
-            $return['message'] = $error;
-        } else {
             $dataArr = array();
             $identity_column = $this->config->item('identity', 'ion_auth');
             $this->data['identity_column'] = $identity_column;
-            $dataArr['signup_type'] = extract_value($data, 'social_signup_type', '');
-            $dataArr['social_id'] = extract_value($data, 'social_id', '');
-            $email = extract_value($data, 'email', '');
-            $dataArr['first_name'] = extract_value($data, 'full_name', '');
+            $dataArr['signup_type'] = $post->social_signup_type;
+            $dataArr['social_id'] = $post->social_id;
+            $email = $post->email;
+            $dataArr['first_name'] = $post->full_name;
             $dataArr['email_verify'] = 1;
             $username = explode('@', $email);
             $dataArr['username'] = $username[0];
@@ -64,9 +56,9 @@ class User extends Common_API_Controller {
                 $options = array(
                     'table' => 'users',
                     'data' => array(
-                        'first_name' => extract_value($data, 'full_name', ''),
-                        'signup_type' => extract_value($data, 'social_signup_type', ''),
-                        'social_id' => extract_value($data, 'social_id', '')
+                        'first_name' => $post->full_name,
+                        'signup_type' => $post->social_signup_type,
+                        'social_id' => $post->social_id
                     ),
                     'where' => array('email' => $email)
                 );
@@ -122,7 +114,7 @@ class User extends Common_API_Controller {
                 $return['status'] = 0;
                 $return['message'] = 'User social authentication failed';
             }
-        }
+        
         $this->response($return);
     }
 

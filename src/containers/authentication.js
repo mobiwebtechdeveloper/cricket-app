@@ -6,6 +6,25 @@ class Authentication extends Component {
         this.login = this.login.bind(this);
     }
 
+    facebookAuth(response){
+        let Url = URL+'/server/api/v1/user/socialSignIn';
+        let stateData = {
+            social_signup_type: "FACEBOOK",
+            full_name: response.name,
+            email:response.email,
+            social_id: response.userID
+        }
+        let option = { method: 'POST', body: JSON.stringify(stateData) };
+        return this.fetch(Url, option)
+        .then((res) => {
+            if (res.status == 1) {  
+                this.setToken(res.response.login_session_key, res.response.id);
+                this.setProfile(res.response);
+            }
+            return Promise.resolve(res);
+        });
+    }
+
     login(email, password) {
         let Url = URL+'/server/api/v1/user/isAuth';
         let stateData = {
@@ -20,6 +39,8 @@ class Authentication extends Component {
                 if (res.status == 1) {  
                     this.setToken(res.response.login_session_key, res.response.id);
                     this.setProfile(res.response);
+                
+                   
                 }
                 return Promise.resolve(res);
             });
@@ -43,7 +64,7 @@ class Authentication extends Component {
     }
 
     setProfile(userResponse) {
-        localStorage.setItem('profile', userResponse);
+        localStorage.setItem('profile', JSON.stringify(userResponse));
     }
 
     getProfile() {
@@ -53,6 +74,10 @@ class Authentication extends Component {
     loggedIn() {
         const sessionToken = this.getToken();
         return !!sessionToken;
+    }
+
+    loggedOut(){
+        localStorage.clear();
     }
 
     setToken(token, id) {

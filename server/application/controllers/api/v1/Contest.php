@@ -14,6 +14,68 @@ class Contest extends Common_API_Controller {
         parent::__construct();
     }
 
+    function mega_contests_post() {
+        $data = @file_get_contents("php://input");
+        $post = json_decode($data);
+        $return['code'] = 200;
+        $return['response'] = new stdClass();
+            $matchId = $post->match_id;
+            $user_id = $post->user_id;
+            $options = array(
+                'table' => 'contest as ct',
+                'select' => 'ct.id,ct.match_type,ct.contest_name,ct.total_winning_amount,ct.contest_size,'
+                . 'ct.team_entry_fee,ct.number_of_winners,ct.is_multientry,ct.confirm_contest,ct.mega_contest',
+                'join' => array('contest_matches as cm' => 'cm.contest_id=ct.id'),
+                'where' => array('cm.match_id' => $matchId, 'ct.mega_contest' => 1),
+                'single' => true
+            );
+            $constant = $this->common_model->customGet($options);
+            if (!empty($constant)) {
+                $contestResponse = array();
+                $temp['id'] = $constant->id;
+                $temp['match_type'] = $constant->match_type;
+                $temp['contest_name'] = $constant->contest_name;
+                $temp['total_winning_amount'] = $constant->total_winning_amount;
+                $temp['contest_size'] = $constant->contest_size;
+                $temp['team_entry_fee'] = $constant->team_entry_fee;
+                $temp['number_of_winners'] = $constant->number_of_winners;
+                $temp['is_multientry'] = $constant->is_multientry;
+                $temp['confirm_contest'] = $constant->confirm_contest;
+                $temp['mega_contest'] = $constant->mega_contest;
+                $options = array(
+                    'table' => 'join_contest',
+                    'select' => 'id',
+                    'where' => array('contest_id' => $constant->id, 'user_id' => $user_id)
+                );
+                $isJoined = $this->common_model->customGet($options);
+                $temp['is_user_joined'] = (!empty($isJoined)) ? 1 : 0;
+                $options = array(
+                    'table' => 'contest_details',
+                    'select' => 'from_winner,to_winner,amount',
+                    'where' => array('contest_id' => $constant->id)
+                );
+                $rank = $this->common_model->customGet($options);
+                $temp['winners_rank'] = array();
+                if (!empty($rank)) {
+                    foreach ($rank as $rows) {
+                        $temp2['rank'] = ($rows->from_winner == $rows->to_winner) ? $rows->from_winner : $rows->from_winner . ' - ' . $rows->to_winner;
+                        $temp2['prize'] = $rows->amount;
+                        $temp['winners_rank'][] = $temp2;
+                    }
+                }
+                $contestResponse[] = $temp;
+
+                $return['response'] = $contestResponse;
+                $return['status'] = 1;
+                $return['message'] = 'Mega Contest found successfully';
+            } else {
+                $return['status'] = 0;
+                $return['message'] = 'Mega Contest not found';
+            }
+        
+        $this->response($return);
+    }
+
     /**
      * Function Name: contest
      * Description:   To get contest list
